@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>California Rent vs. Buy Tax Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chosen Palette: Calm Neutrals -->
+    <!-- Application Structure Plan: A single-column interactive dashboard. Section 1: "Your Financial Profile" (User Inputs) acts as the control panel. Section 2: "The Bottom Line" (Key Metrics) provides an immediate, high-level summary. Section 3: "Detailed Breakdown" (Charts & Tables) explains the 'why' behind the numbers. This structure was chosen because the user's goal is exploratory ("see the impact of different parameters"). It allows them to change inputs and immediately see the results (summary) and the underlying reasons (tax & cost breakdowns) in a single, logical flow, fostering easy exploration of the rent vs. buy decision. -->
+    <!-- Visualization & Content Choices:
+        - Report Info: User financial inputs (income, home price, etc.) -> Goal: Collect parameters -> Viz/Method: HTML Form with styled inputs -> Interaction: User enters data, clicks "Calculate" -> Justification: Standard, intuitive data entry for a calculator.
+        - Report Info: Net Monthly Cost (Buy vs. Rent), Tax Savings -> Goal: Show the final answer clearly -> Viz/Method: High-contrast "Stat Cards" (Styled divs) -> Interaction: Read-only, updates on calculate -> Justification: High-visibility for key takeaways.
+        - Report Info: Monthly Cost Components (PITI vs. Rent) -> Goal: Compare gross monthly cash flow -> Viz/Method: Stacked Bar Chart (Chart.js) -> Interaction: Hover for tooltips on cost components (Principal, Interest, Tax, etc.) -> Justification: Visually breaks down the "Buy" cost and compares it to the single "Rent" cost.
+        - Report Info: Tax Deduction Comparison (Standard vs. Itemized for Fed/CA) -> Goal: Directly show the impact of mortgage interest and SALT (user's key question) -> Viz/Method: Two Grouped Bar Charts (Chart.js) -> Interaction: Hover for tooltips -> Justification: This is the core of the user's question. Visually showing 'Itemized > Standard' is the 'aha!' moment.
+        - Report Info: Full Financial Summary (Income, Deductions, Taxes) -> Goal: Provide a transparent, detailed breakdown of all calculations -> Viz/Method: HTML Table -> Interaction: Read-only, updates on calculate -> Justification: A table is the clearest way to show the multi-step financial math for transparency.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 350px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+                max-height: 400px;
+            }
+        }
+        input[type="number"], select {
+            @apply w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200;
+        }
+        label {
+            @apply block text-sm font-medium text-slate-700 mb-1;
+        }
+        .stat-card {
+            @apply bg-white p-6 rounded-lg shadow-lg transition-all duration-300;
+        }
+        .stat-title {
+            @apply text-sm font-medium text-slate-500 uppercase tracking-wider;
+        }
+        .stat-value {
+            @apply text-4xl font-bold text-slate-900 mt-2;
+        }
+        .stat-negative {
+            @apply text-red-600;
+        }
+        .stat-positive {
+            @apply text-green-700;
+        }
+        .calculate-btn {
+            @apply w-full col-span-1 md:col-span-3 bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 transition duration-300 text-lg;
+        }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <div class="max-w-7xl mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-5xl font-bold text-slate-900">California Rent vs. Buy Calculator</h1>
+            <p class="text-lg text-slate-600 mt-4 max-w-3xl mx-auto">See the financial impact of buying a home, focusing on tax deductions for mortgage interest and SALT in California.</p>
+        </header>
+
+        <!-- Section 1: Your Financial Profile (Inputs) -->
+        <section id="input-section" class="mb-10">
+            <h2 class="text-3xl font-semibold text-slate-900 mb-6">1. Your Financial Profile</h2>
+            <div class="bg-white p-6 md:p-8 rounded-lg shadow-lg">
+                <p class="text-slate-600 mb-6">Enter your financial details to get started. The calculations below will update based on these numbers, focusing on your first year of homeownership.</p>
+                <form id="calc-form" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label for="annual-income">Annual Gross Income</label>
+                        <input type="number" id="annual-income" value="300000">
+                    </div>
+                    <div>
+                        <label for="filing-status">Filing Status</label>
+                        <select id="filing-status">
+                            <option value="single">Single</option>
+                            <option value="mfj">Married Filing Jointly</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="monthly-rent">Current Monthly Rent</label>
+                        <input type="number" id="monthly-rent" value="2500">
+                    </div>
+                    <div>
+                        <label for="home-price">Home Price</label>
+                        <input type="number" id="home-price" value="750000">
+                    </div>
+                    <div>
+                        <label for="down-payment">Down Payment</label>
+                        <input type="number" id="down-payment" value="150000">
+                    </div>
+                    <div>
+                        <label for="interest-rate">Mortgage Interest Rate (%)</label>
+                        <input type="number" id="interest-rate" value="6.5">
+                    </div>
+                    <div>
+                        <label for="property-tax-rate">Property Tax Rate (%)</label>
+                        <input type="number" id="property-tax-rate" value="1.25">
+                    </div>
+                    <div>
+                        <label for="salt-cap">Federal SALT Cap Limit ($)</label>
+                        <input type="number" id="salt-cap" value="40000">
+                    </div>
+                    <div>
+                        <label for="home-insurance">Annual Home Insurance</label>
+                        <input type="number" id="home-insurance" value="1500">
+                    </div>
+                    <div>
+                        <label for="hoa-fees">Monthly HOA Fees</label>
+                        <input type="number" id="hoa-fees" value="0">
+                    </div>
+                    
+                    <button type="button" id="calculate-btn" class="calculate-btn">Calculate Analysis</button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Section 2: The Bottom Line (High-Level Summary) -->
+        <section id="summary-section" class="mb-10">
+            <h2 class="text-3xl font-semibold text-slate-900 mb-6">2. The Bottom Line: Year 1</h2>
+            <p class="text-slate-600 mb-6 max-w-3xl">This is the "so what?" of your decision, comparing your effective monthly housing cost after accounting for tax savings. This does not include equity built or market appreciation.</p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="stat-card">
+                    <span class="stat-title">Effective Monthly Cost (Buy)</span>
+                    <div id="net-buy-cost" class="stat-value">$0</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-title">Monthly Cost (Rent)</span>
+                    <div id="net-rent-cost" class="stat-value">$0</div>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-title">Monthly Savings (Buy vs. Rent)</span>
+                    <div id="monthly-savings" class="stat-value stat-positive">$0</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Detailed Breakdown -->
+        <section id="breakdown-section">
+            <h2 class="text-3xl font-semibold text-slate-900 mb-6">3. Detailed Breakdown</h2>
+            <div class="bg-white p-6 md:p-8 rounded-lg shadow-lg">
+
+                <!-- Monthly Cost Comparison -->
+                <div class="mb-12">
+                    <h3 class="text-2xl font-semibold text-center mb-4">Monthly Housing Cost (Before Taxes)</h3>
+                    <p class="text-slate-600 text-center max-w-2xl mx-auto mb-6">This chart compares your gross monthly rent to the components of your homeownership cost (PITI: Principal, Interest, Taxes, Insurance) plus any HOA fees.</p>
+                    <div class="chart-container">
+                        <canvas id="monthlyCostChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Tax Deduction Analysis -->
+                <div class="mb-12">
+                    <h3 class="text-2xl font-semibold text-center mb-4">The Tax Advantage: Deductions</h3>
+                    <p class="text-slate-600 text-center max-w-2xl mx-auto mb-6">This shows how your housing costs translate into tax deductions. The SALT (State & Local Tax) deduction is the sum of your Property Taxes and State Income Taxes, capped at the limit you set.</p>
+                    
+                    <!-- New Breakdown Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            <div class="text-sm text-blue-600 font-semibold uppercase">Mortgage Interest</div>
+                            <div id="disp-mortgage-interest" class="text-2xl font-bold text-slate-800">$0</div>
+                            <div class="text-xs text-slate-500">Deductible Interest (Year 1)</div>
+                        </div>
+                        <div class="bg-orange-50 p-4 rounded-lg border border-orange-100">
+                            <div class="text-sm text-orange-600 font-semibold uppercase">Total SALT Generated</div>
+                            <div id="disp-salt-total" class="text-2xl font-bold text-slate-800">$0</div>
+                            <div class="text-xs text-slate-500">Prop Tax + State Income Tax</div>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+                            <div class="text-sm text-green-600 font-semibold uppercase">SALT Allowed</div>
+                            <div id="disp-salt-allowed" class="text-2xl font-bold text-slate-800">$0</div>
+                            <div class="text-xs text-slate-500">Capped at Input Limit</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h4 class="text-xl font-medium text-center mb-4">Federal Deductions</h4>
+                            <div class="chart-container" style="max-width: 500px;">
+                                <canvas id="federalDeductionChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-medium text-center mb-4">California Deductions</h4>
+                            <div class="chart-container" style="max-width: 500px;">
+                                <canvas id="californiaDeductionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Year 1 Summary Table -->
+                <div>
+                    <h3 class="text-2xl font-semibold text-center mb-4">Year 1 Financial Summary</h3>
+                    <p class="text-slate-600 text-center max-w-2xl mx-auto mb-6">This table shows the complete calculation, from income to deductions to your final tax bill, comparing the two scenarios side-by-side.</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full min-w-[600px] text-left">
+                            <thead>
+                                <tr class="border-b border-slate-300">
+                                    <th class="py-3 pr-3 font-semibold">Metric</th>
+                                    <th class="py-3 px-3 font-semibold text-center">Rent Scenario</th>
+                                    <th class="py-3 pl-3 font-semibold text-center">Buy Scenario</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summary-table-body" class="divide-y divide-slate-200">
+                                <!-- JS will populate this -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- DOM ELEMENTS ---
+            const $ = (id) => document.getElementById(id);
+            const inputs = {
+                income: $('annual-income'),
+                filingStatus: $('filing-status'),
+                rent: $('monthly-rent'),
+                homePrice: $('home-price'),
+                downPayment: $('down-payment'),
+                rate: $('interest-rate'),
+                propTaxRate: $('property-tax-rate'),
+                saltCap: $('salt-cap'),
+                insurance: $('home-insurance'),
+                hoa: $('hoa-fees'),
+            };
+            const outputs = {
+                netBuyCost: $('net-buy-cost'),
+                netRentCost: $('net-rent-cost'),
+                monthlySavings: $('monthly-savings'),
+                tableBody: $('summary-table-body'),
+                dispMortgageInterest: $('disp-mortgage-interest'),
+                dispSaltTotal: $('disp-salt-total'),
+                dispSaltAllowed: $('disp-salt-allowed'),
+            };
+            const calcButton = $('calculate-btn');
+            
+            // --- CHART INSTANCES ---
+            let costChart, fedChart, caChart;
+            
+            // --- TAX DATA (Simplified 2024/2025 estimates) ---
+            const FED_DEDUCTIONS = { single: 14600, mfj: 29200 };
+            const CA_DEDUCTIONS = { single: 5363, mfj: 10726 };
+            // SALT CAP is now dynamic
+            
+            const FED_BRACKETS = {
+                single: [
+                    { rate: 0.10, threshold: 0 },
+                    { rate: 0.12, threshold: 11600 },
+                    { rate: 0.22, threshold: 47150 },
+                    { rate: 0.24, threshold: 100525 },
+                    { rate: 0.32, threshold: 191950 },
+                    { rate: 0.35, threshold: 243725 },
+                    { rate: 0.37, threshold: 609350 }
+                ],
+                mfj: [
+                    { rate: 0.10, threshold: 0 },
+                    { rate: 0.12, threshold: 23200 },
+                    { rate: 0.22, threshold: 94300 },
+                    { rate: 0.24, threshold: 201050 },
+                    { rate: 0.32, threshold: 383900 },
+                    { rate: 0.35, threshold: 487450 },
+                    { rate: 0.37, threshold: 731200 }
+                ]
+            };
+            
+            const CA_BRACKETS = {
+                single: [
+                    { rate: 0.01, threshold: 0 },
+                    { rate: 0.02, threshold: 10412 },
+                    { rate: 0.04, threshold: 24684 },
+                    { rate: 0.06, threshold: 38959 },
+                    { rate: 0.08, threshold: 54081 },
+                    { rate: 0.093, threshold: 68350 },
+                    { rate: 0.103, threshold: 349137 },
+                    { rate: 0.113, threshold: 418961 },
+                    { rate: 0.123, threshold: 698271 }
+                ],
+                mfj: [
+                    { rate: 0.01, threshold: 0 },
+                    { rate: 0.02, threshold: 20824 },
+                    { rate: 0.04, threshold: 49368 },
+                    { rate: 0.06, threshold: 77918 },
+                    { rate: 0.08, threshold: 108162 },
+                    { rate: 0.093, threshold: 136700 },
+                    { rate: 0.103, threshold: 698274 },
+                    { rate: 0.113, threshold: 837922 },
+                    { rate: 0.123, threshold: 1396542 }
+                ]
+            };
+            
+            // --- HELPER FUNCTIONS ---
+            
+            function formatCurrency(val) {
+                return val.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            }
+
+            function wrapText(ctx, text, maxWidth) {
+                const words = text.split(' ');
+                let lines = [];
+                let currentLine = words[0];
+                for (let i = 1; i < words.length; i++) {
+                    let word = words[i];
+                    let width = ctx.measureText(currentLine + " " + word).width;
+                    if (width < maxWidth) {
+                        currentLine += " " + word;
+                    } else {
+                        lines.push(currentLine);
+                        currentLine = word;
+                    }
+                }
+                lines.push(currentLine);
+                return lines;
+            }
+
+            function calculateTax(income, filingStatus, brackets) {
+                let taxableIncome = Math.max(0, income);
+                let tax = 0;
+                let processedIncome = 0;
+                const bracket = brackets[filingStatus];
+
+                for (let i = 0; i < bracket.length; i++) {
+                    const current = bracket[i];
+                    const next = bracket[i + 1];
+                    const cap = next ? next.threshold : Infinity;
+                    
+                    const taxableInBracket = Math.min(taxableIncome, cap - current.threshold);
+                    tax += taxableInBracket * current.rate;
+                    taxableIncome -= taxableInBracket;
+                    
+                    if (taxableIncome <= 0) break;
+                }
+                return tax;
+            }
+
+            function calculateAmortization(principal, annualRate, termYears) {
+                const monthlyRate = annualRate / 100 / 12;
+                const numPayments = termYears * 12;
+                if (monthlyRate === 0) {
+                    return { monthlyPayment: principal / numPayments, firstYearInterest: 0, firstYearPrincipal: principal / termYears };
+                }
+                const monthlyPayment = principal * (monthlyRate * Math.pow(1 + monthlyRate, numPayments)) / (Math.pow(1 + monthlyRate, numPayments) - 1);
+                
+                let balance = principal;
+                let firstYearInterest = 0;
+                let firstYearPrincipal = 0;
+
+                for (let i = 0; i < 12; i++) {
+                    let interest = balance * monthlyRate;
+                    let principalPaid = monthlyPayment - interest;
+                    firstYearInterest += interest;
+                    firstYearPrincipal += principalPaid;
+                    balance -= principalPaid;
+                }
+                
+                return { monthlyPayment, firstYearInterest, firstYearPrincipal };
+            }
+
+            // --- CHART INITIALIZATION ---
+            function initCharts() {
+                Chart.defaults.font.family = 'Inter';
+                Chart.defaults.font.size = 12;
+                Chart.defaults.color = '#334155'; // slate-700
+                const tooltipConfig = {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
+                        }
+                    },
+                    padding: 10,
+                    backgroundColor: '#0f172a', // slate-900
+                    titleFont: { weight: 'bold' },
+                    bodyFont: { size: 14 },
+                    cornerRadius: 4,
+                    displayColors: false,
+                };
+
+                const costCtx = $('monthlyCostChart').getContext('2d');
+                costChart = new Chart(costCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Rent Scenario', 'Buy Scenario'],
+                        datasets: [
+                            { label: 'Rent', data: [0, 0], backgroundColor: '#64748b' }, // slate-500
+                            { label: 'Principal', data: [0, 0], backgroundColor: '#3b82f6' }, // blue-500
+                            { label: 'Interest', data: [0, 0], backgroundColor: '#ef4444' }, // red-500
+                            { label: 'Property Tax', data: [0, 0], backgroundColor: '#f97316' }, // orange-500
+                            { label: 'Insurance & HOA', data: [0, 0], backgroundColor: '#eab308' } // yellow-500
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { stacked: true },
+                            y: { 
+                                stacked: true,
+                                ticks: {
+                                    callback: (value) => formatCurrency(value)
+                                }
+                            }
+                        },
+                        plugins: {
+                            tooltip: tooltipConfig,
+                            title: { display: false }
+                        }
+                    }
+                });
+
+                const fedCtx = $('federalDeductionChart').getContext('2d');
+                fedChart = new Chart(fedCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Standard', 'Itemized'],
+                        datasets: [
+                            { label: 'Deduction Amount', data: [0, 0], backgroundColor: ['#64748b', '#3b82f6'] },
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { ticks: { callback: (value) => formatCurrency(value) } } },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: tooltipConfig,
+                            title: { display: false }
+                        }
+                    }
+                });
+                
+                const caCtx = $('californiaDeductionChart').getContext('2d');
+                caChart = new Chart(caCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Standard', 'Itemized'],
+                        datasets: [
+                            { label: 'Deduction Amount', data: [0, 0], backgroundColor: ['#64748b', '#3b82f6'] },
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { ticks: { callback: (value) => formatCurrency(value) } } },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: tooltipConfig,
+                            title: { display: false }
+                        }
+                    }
+                });
+            }
+            
+            // --- MAIN CALCULATION FUNCTION ---
+            function updateAnalysis() {
+                // 1. Get Inputs
+                const income = parseFloat(inputs.income.value) || 0;
+                const status = inputs.filingStatus.value;
+                const monthlyRent = parseFloat(inputs.rent.value) || 0;
+                const homePrice = parseFloat(inputs.homePrice.value) || 0;
+                const downPayment = parseFloat(inputs.downPayment.value) || 0;
+                const rate = parseFloat(inputs.rate.value) || 0;
+                const propTaxRate = parseFloat(inputs.propTaxRate.value) / 100 || 0;
+                const saltCap = parseFloat(inputs.saltCap.value) || 0;
+                const insurance = parseFloat(inputs.insurance.value) || 0;
+                const hoa = parseFloat(inputs.hoa.value) || 0;
+                
+                // 2. Rent Scenario
+                const fedStandard_Rent = FED_DEDUCTIONS[status];
+                const caStandard_Rent = CA_DEDUCTIONS[status];
+                
+                const fedTaxable_Rent = income - fedStandard_Rent;
+                const caTaxable_Rent = income - caStandard_Rent;
+                
+                const fedTax_Rent = calculateTax(fedTaxable_Rent, status, FED_BRACKETS);
+                const caTax_Rent = calculateTax(caTaxable_Rent, status, CA_BRACKETS);
+                const totalTax_Rent = fedTax_Rent + caTax_Rent;
+                const annualRentCost = monthlyRent * 12;
+
+                // 3. Buy Scenario
+                const loanAmount = homePrice - downPayment;
+                const { monthlyPayment, firstYearInterest, firstYearPrincipal } = calculateAmortization(loanAmount, rate, 30);
+                
+                const propertyTax = homePrice * propTaxRate;
+                const monthlyPITI_HOA = monthlyPayment + (propertyTax / 12) + (insurance / 12) + hoa;
+                const annualBuyCost = monthlyPITI_HOA * 12;
+                
+                // Itemized Deductions Calculation
+                // Step A: Calculate CA State Tax first (needed for Federal SALT)
+                // CA allows deducting Mortgage Interest & Property Tax (but not State Tax)
+                const caItemized = firstYearInterest + propertyTax;
+                const caDeduction = Math.max(caStandard_Rent, caItemized); // Use CA standard or itemized
+                const caTaxable_Buy = income - caDeduction;
+                const caTax_Buy = calculateTax(caTaxable_Buy, status, CA_BRACKETS);
+
+                // Step B: Federal SALT Calculation
+                // SALT = State Income Tax (calculated above) + Property Tax
+                const rawSaltTotal = caTax_Buy + propertyTax;
+                const saltAllowed = Math.min(saltCap, rawSaltTotal);
+                
+                // Step C: Federal Itemized Total
+                const fedItemized = firstYearInterest + saltAllowed;
+                const fedDeduction = Math.max(fedStandard_Rent, fedItemized);
+                
+                const fedTaxable_Buy = income - fedDeduction;
+                const fedTax_Buy = calculateTax(fedTaxable_Buy, status, FED_BRACKETS);
+                const totalTax_Buy = fedTax_Buy + caTax_Buy;
+
+                // 4. Summary
+                const taxSavings = totalTax_Rent - totalTax_Buy;
+                const netAnnualBuyCost = annualBuyCost - taxSavings;
+                const netMonthlyBuyCost = netAnnualBuyCost / 12;
+                const netMonthlyRentCost = annualRentCost / 12;
+                const savings = netMonthlyRentCost - netMonthlyBuyCost;
+
+                // 5. Update DOM
+                
+                // Stat Cards
+                outputs.netBuyCost.innerText = formatCurrency(netMonthlyBuyCost);
+                outputs.netRentCost.innerText = formatCurrency(netMonthlyRentCost);
+                outputs.monthlySavings.innerText = formatCurrency(savings);
+                if (savings < 0) {
+                    outputs.monthlySavings.classList.remove('stat-positive');
+                    outputs.monthlySavings.classList.add('stat-negative');
+                } else {
+                    outputs.monthlySavings.classList.add('stat-positive');
+                    outputs.monthlySavings.classList.remove('stat-negative');
+                }
+
+                // Deduction Breakdown Panels
+                outputs.dispMortgageInterest.innerText = formatCurrency(firstYearInterest);
+                outputs.dispSaltTotal.innerText = formatCurrency(rawSaltTotal);
+                outputs.dispSaltAllowed.innerText = formatCurrency(saltAllowed);
+
+                // Cost Chart
+                costChart.data.datasets[0].data = [monthlyRent, 0];
+                costChart.data.datasets[1].data = [0, firstYearPrincipal / 12];
+                costChart.data.datasets[2].data = [0, firstYearInterest / 12];
+                costChart.data.datasets[3].data = [0, propertyTax / 12];
+                costChart.data.datasets[4].data = [0, (insurance / 12) + hoa];
+                costChart.update();
+
+                // Deduction Charts
+                fedChart.data.datasets[0].data = [fedStandard_Rent, fedItemized];
+                fedChart.update();
+                caChart.data.datasets[0].data = [caStandard_Rent, caItemized];
+                caChart.update();
+
+                // Summary Table
+                const tableData = [
+                    { metric: 'Annual Gross Income', rent: income, buy: income },
+                    { metric: '--- Tax Deductions ---', rent: '', buy: '', isHeader: true },
+                    { metric: 'Mortgage Interest (Ded.)', rent: 0, buy: firstYearInterest },
+                    { metric: 'Property Tax (Paid)', rent: 0, buy: propertyTax },
+                    { metric: 'State Income Tax (Paid)', rent: caTax_Rent, buy: caTax_Buy },
+                    { metric: 'SALT Total (Prop + State)', rent: '-', buy: rawSaltTotal, isHighlight: true },
+                    { metric: 'SALT Allowed (Cap)', rent: '-', buy: saltAllowed, isHighlight: true },
+                    { metric: 'Total Fed Itemized', rent: '-', buy: fedItemized },
+                    { metric: 'Federal Deduction Used', rent: fedStandard_Rent, buy: fedDeduction, isBold: true },
+                    { metric: 'California Deduction Used', rent: caStandard_Rent, buy: caDeduction, isBold: true },
+                    { metric: '--- Taxes Owed ---', rent: '', buy: '', isHeader: true },
+                    { metric: 'Federal Taxable Income', rent: fedTaxable_Rent, buy: fedTaxable_Buy },
+                    { metric: 'California Taxable Income', rent: caTaxable_Rent, buy: caTaxable_Buy },
+                    { metric: 'Total Tax Bill (Fed + CA)', rent: totalTax_Rent, buy: totalTax_Buy, isBold: true },
+                    { metric: 'Annual Tax Savings', rent: 0, buy: taxSavings, isBold: true, isHighlight: true },
+                    { metric: '--- Housing Costs ---', rent: '', buy: '', isHeader: true },
+                    { metric: 'Annual Housing Cost', rent: annualRentCost, buy: annualBuyCost },
+                    { metric: 'Net Annual Cost (After Tax)', rent: annualRentCost, buy: netAnnualBuyCost, isBold: true },
+                    { metric: 'Net Monthly Cost', rent: netMonthlyRentCost, buy: netMonthlyBuyCost, isBold: true },
+                    { metric: '--- Equity (Year 1) ---', rent: '', buy: '', isHeader: true },
+                    { metric: 'Principal Paid (Equity)', rent: 0, buy: firstYearPrincipal, isHighlight: true },
+                ];
+
+                outputs.tableBody.innerHTML = tableData.map(row => {
+                    if (row.isHeader) {
+                        return `<tr class="bg-slate-50"><td colspan="3" class="py-3 pr-3 font-medium text-slate-600">${row.metric}</td></tr>`;
+                    }
+                    const rentVal = typeof row.rent === 'number' ? formatCurrency(row.rent) : row.rent;
+                    const buyVal = typeof row.buy === 'number' ? formatCurrency(row.buy) : row.buy;
+                    const bold = row.isBold ? 'font-semibold' : '';
+                    const highlight = row.isHighlight ? 'text-green-700' : '';
+                    return `
+                        <tr class="${bold}">
+                            <td class="py-3 pr-3">${row.metric}</td>
+                            <td class="py-3 px-3 text-center">${rentVal}</td>
+                            <td class="py-3 pl-3 text-center ${highlight}">${buyVal}</td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+            
+            // --- EVENT LISTENERS ---
+            calcButton.addEventListener('click', updateAnalysis);
+            
+            // --- INITIALIZE ---
+            initCharts();
+            updateAnalysis();
+
+        });
+    </script>
+</body>
+</html>
